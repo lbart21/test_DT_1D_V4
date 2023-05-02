@@ -11,6 +11,8 @@ Contents:
 """
 import numpy as np
 
+import pyeq
+
 from copy import deepcopy
 
 from gdtk.gas import GasModel, GasState, ThermochemicalReactor
@@ -88,8 +90,25 @@ from Algorithms.DT_1D_V4.models.single_phase_multi_species_reactive_pipe_with_ta
         single_phase_multi_species_reactive_pipe_with_tanh_fast_chemsitry_for_goal_massf_profile \
             import SinglePhaseMultiSpeciesReactivePipeWithTanhFastChemistryForGoalMassfProfile
 
+from Algorithms.DT_1D_V4.models.single_phase_multi_species_finite_rate_reactive_elliptic_nozzle.\
+        single_phase_multi_species_finite_rate_reactive_elliptic_nozzle \
+            import SinglePhaseMultiSpeciesFiniteRateReactiveEllipticNozzle
+
+from Algorithms.DT_1D_V4.models.single_phase_multi_species_finite_rate_reactive_pipe_new.\
+        single_phase_multi_species_finite_rate_reactive_pipe_new \
+            import SinglePhaseMultiSpeciesFiniteRateReactivePipeNew
+
+from Algorithms.DT_1D_V4.models.single_phase_multi_species_finite_rate_reactive_quadratic_nozzle.\
+        single_phase_multi_species_finite_rate_reactive_quadratic_nozzle \
+            import SinglePhaseMultiSpeciesFiniteRateReactiveQuadraticNozzle
+
+from Algorithms.DT_1D_V4.models.single_phase_multi_species_bulk_chemistry_for_goal_massf_uniform.\
+        single_phase_multi_species_bulk_chemistry_for_goal_massf_uniform \
+            import SinglePhaseMultiSpeciesBulkChemistryForGoalMassfUniform
+
 from Algorithms.StoichiometricRatioSolver.determine_stoichiometric_coefficients \
         import SystemOfReactions
+from Algorithms.StoichiometricRatioSolver.bulk_reaction import BulkReaction  
 from Algorithms.StoichiometricRatioSolver.molecule import Molecule
 from Algorithms.StoichiometricRatioSolver.reaction import Reaction
 
@@ -1956,7 +1975,7 @@ S = Solver(mesh_object = Pipe, \
 """
 ####################################################################################################
 ##### FV reactor with 18 reactions, 9sp
-
+"""
 # Pipe component is SinglePhaseMultiSpeciesFiniteRateReactivePipe
 # Pipe length = 0.1m
 # Pipe Diameter = 0.1m
@@ -2011,3 +2030,330 @@ S = Solver(mesh_object = Pipe, \
             sim_number = 1, \
             spatial_cell_flow_property_variables_to_write = ["T", "p", "rho", "u", "vel_x", "Ma", "massf"], \
             rapid_data_save_steps = 1)
+"""
+####################################################################################################
+##### Three inlet MSSE 6 sp 4 reactions test case
+"""
+# First cell will be mixing cell of 3 inlets, SinglePhaseMultiSpeciesMultiInletNonReactivePipe
+# Combustion chamber component is SinglePhaseMultiSpeciesFiniteRateReactivePipeNew
+# Combustion chamber length = 
+# Combustion chamber diameter = 
+# Inlet BC = Stagnation with mass flux 
+# Outlet BC = OutFlow
+# Fluid: 6sp, O2, H2, O, H, OH, H2O
+# Initial state: p = 0.3atm, T = 880K, 99% N2, 0.5% O2, 0.5% H2
+# Reconstruction: eilmer_L1R1
+# Flux Scheme: AUSMPlusUPOriginal
+# Limiter: eilmer_van_albada_L2R2
+# t_final = 0.1
+
+NCELLS1 = 20
+NCELLS2 = 20
+NCELLS3 = 20
+
+D_1 = 0.45
+D_t = 0.2764
+D_e = 0.73
+
+L_c = 0.25
+L_cn = 0.12
+L_dn = 0.31
+
+A_ox = 1.0/12.0 * np.pi * D_1 ** 2.0
+A_fb = 1.0/12.0 * np.pi * D_1 ** 2.0
+A_ob = 1.0/12.0 * np.pi * D_1 ** 2.0
+
+gm_init  = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_init = GasState(gm_init)
+gs_init.p = 1.9795e7
+gs_init.T = 3315.556 + 273.15
+massf = [0.036971, 0.004958, 0.045356, 0.90847, 0.0018939, 0.0023543]
+massf = (np.array(massf) / sum(massf)).tolist()
+gs_init.massf = massf
+gs_init.update_thermo_from_pT()
+M_init = 0.1
+fs_init = FlowState(state = gs_init, vel_x = M_init * gs_init.a)
+
+gm_reactor = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+
+reactor = ThermochemicalReactor(gmodel = gm_reactor, \
+                                filename1 = "h2-o2-6sp-4r-alphaQSS-default-chemistry.lua")
+
+mixer = SinglePhaseMultiSpeciesMultiInletNonReactivePipe(n_cells = 1, n_inlets = 3, \
+            bulk_geometry = [D_1, L_c/(NCELLS1+1)], inlet_areas = [A_ox, A_fb, A_ob], \
+            init_flow_state = fs_init, comp_label = "mixer", limiter = "eilmer_van_albada_L2R2", \
+            recon_scheme = ["eilmer_L1R1", [1, 1]], recon_props = ["p", "T", "vel_x", "massf"], \
+            update_from = "pT", flux_scheme = "AUSMPlusUPOriginal", \
+            reverse_direction_for_mirrored_flow = False)
+
+gm_ox = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_ox = GasState(gm_ox)
+gs_ox.T = 3315.556 + 273.15
+gs_ox.p = 2.4028e7
+gs_ox.massf = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+gs_ox.update_thermo_from_pT()
+
+gm_fb = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_fb = GasState(gm_fb)
+gs_fb.T = 3315.556 + 273.15
+gs_fb.p = 2.1312e7
+gs_fb.massf = [0.53735, 0.46265, 0.0, 0.0, 0.0, 0.0]
+gs_fb.update_thermo_from_pT()
+
+gm_ob = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_ob = GasState(gm_ob)
+gs_ob.T = 3315.556 + 273.15
+gs_ob.p = 2.1367e7
+gs_ob.massf = [0.6228, 0.3772, 0.0, 0.0, 0.0, 0.0]
+gs_ob.update_thermo_from_pT()
+
+mixer.add_boundary_conditions(BC = [0, ["FromStagnationWithMassFlowRateInFlow_BC", 1, [gs_ox, 380.564]]]) #oxidiser line
+mixer.add_boundary_conditions(BC = [1, ["FromStagnationWithMassFlowRateInFlow_BC", 1, [gs_fb, 65.589]]]) #fuel preburner line
+mixer.add_boundary_conditions(BC = [2, ["FromStagnationWithMassFlowRateInFlow_BC", 1, [gs_ob, 29.93]]]) #ox preburner line
+
+chamber = SinglePhaseMultiSpeciesFiniteRateReactivePipeNew(n_cells = NCELLS1, \
+                geometry = [D_1, L_c  * (1.0 - 1.0 / (NCELLS1+1))], limiter = "eilmer_van_albada_L2R2", \
+                comp_label = "chamber", init_flow_state = fs_init, \
+                recon_scheme = ["eilmer_L1R1", [1, 1]], recon_props = ["p", "T", "vel_x", "massf"], \
+                update_from = "pT", flux_scheme = "AUSMPlusUPOriginal", \
+                shared_reactor_object = reactor, reverse_direction_for_ghost_cells = False)
+
+conv_nozzle = SinglePhaseMultiSpeciesFiniteRateReactiveQuadraticNozzle(n_cells = NCELLS2, \
+                geometry = [D_1, D_t, L_cn], limiter = "eilmer_van_albada_L2R2", \
+                comp_label = "conv_nozzle", init_flow_state = fs_init, \
+                recon_scheme = ["eilmer_L1R1", [1, 1]], recon_props = ["p", "T", "vel_x", "massf"], \
+                update_from = "pT", flux_scheme = "AUSMPlusUPOriginal", \
+                shared_reactor_object = reactor, reverse_direction_for_ghost_cells = False)
+
+conv_nozzle.interface_idx_to_track = [NCELLS2]
+
+div_nozzle = SinglePhaseMultiSpeciesFiniteRateReactiveEllipticNozzle(n_cells = NCELLS3, \
+                geometry = [D_t, D_e, L_dn], limiter = "eilmer_van_albada_L2R2", \
+                comp_label = "div_nozzle", init_flow_state = fs_init, \
+                recon_scheme = ["eilmer_L1R1", [1, 1]], recon_props = ["p", "T", "vel_x", "massf"], \
+                update_from = "pT", flux_scheme = "AUSMPlusUPOriginal", \
+                shared_reactor_object = reactor, reverse_direction_for_ghost_cells = False)
+
+div_nozzle.add_boundary_conditions(BC = [NCELLS3, ["SimpleOutFlow_BC", 2]])
+div_nozzle.interface_idx_to_track = [NCELLS3]
+
+joint1 = JointBlock(mesh_object_1 = chamber, mesh_object_2 = conv_nozzle, \
+                    block_1_interface_id_being_replaced = NCELLS1, block_2_interface_id_being_replaced = 0, \
+                    new_interface = deepcopy(chamber.interface_array[NCELLS1]), adding_ghost_cells_bool = False, \
+                    new_component_label = "joint1")
+
+joint2 = JointBlock(mesh_object_1 = joint1, mesh_object_2 = div_nozzle, \
+                    block_1_interface_id_being_replaced = NCELLS1 + NCELLS2, \
+                    block_2_interface_id_being_replaced = 0, \
+                    new_interface = deepcopy(div_nozzle.interface_array[NCELLS1]), \
+                    adding_ghost_cells_bool = False, new_component_label = "joint2")
+
+rocket = JointBlock(mesh_object_1 = joint2, mesh_object_2 = mixer, \
+                    block_1_interface_id_being_replaced = 0, \
+                    block_2_interface_id_being_replaced = 3, new_interface = deepcopy(mixer.interface_array[3]), \
+                    adding_ghost_cells_bool = False, new_component_label = "rocket")
+
+S = Solver(mesh_object = rocket, \
+            cfl_flag = [False, 3e-9], \
+            t_final = 1e-5, data_save_dt = 1e-5, \
+            transient_cell_flow_property_variables_to_write = ["massf", "molef", "conc", "T", "p", "rho", "u", "Ma", "vel_x"], \
+            transient_interface_flow_property_variables_to_write = ["Ma"], \
+            sim_number = 5, \
+            spatial_cell_flow_property_variables_to_write = ["T", "p", "rho", "u", "vel_x", "Ma", "massf"], \
+            rapid_data_save_steps = 100, simulation_description = "Test run of MSSE simulation with Ma 0.1 initialisation")
+"""
+####################################################################################################
+##### Three inlet MSSE cold flow test case
+"""
+# First cell will be mixing cell of 3 inlets, SinglePhaseMultiSpeciesMultiInletNonReactivePipe
+# Combustion chamber component is SinglePhaseMultiSpeciesFiniteRateReactivePipeNew
+# Combustion chamber length = 
+# Combustion chamber diameter = 
+# Inlet BC = Stagnation with mass flux 
+# Outlet BC = OutFlow
+# Fluid: 6sp, O2, H2, O, H, OH, H2O
+# Initial state: p = 0.3atm, T = 880K, 99% N2, 0.5% O2, 0.5% H2
+# Reconstruction: eilmer_L1R1
+# Flux Scheme: AUSMPlusUPOriginal
+# Limiter: eilmer_van_albada_L2R2
+# t_final = 0.1
+scale = 2
+NCELLS1 = 50 * scale
+NCELLS2 = 24 * scale
+NCELLS3 = 62 * scale
+
+D_1 = 0.45
+D_t = 0.2764
+D_e = 0.73
+
+L_c = 0.25
+L_cn = 0.12
+L_dn = 0.31
+
+A_ox = 1.0/12.0 * np.pi * D_1 ** 2.0
+A_fb = 1.0/12.0 * np.pi * D_1 ** 2.0
+A_ob = 1.0/12.0 * np.pi * D_1 ** 2.0
+
+gm_init = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_init = GasState(gm_init)
+gs_init.p = 1.9795e7
+gs_init.T = 3315.556 + 273.15
+massf = [0.036971, 0.004958, 0.045356, 0.90847, 0.0018939, 0.0023543]
+massf = (np.array(massf) / sum(massf)).tolist()
+gs_init.massf = massf
+gs_init.update_thermo_from_pT()
+M_init = 0.1
+fs_init = FlowState(state = gs_init, vel_x = M_init * gs_init.a)
+
+gm_ox = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_ox = GasState(gm_ox)
+gs_ox.T = 3315.556 + 273.15
+gs_ox.p = 2.4028e7
+gs_ox.massf = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+gs_ox.update_thermo_from_pT()
+
+gm_fb = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_fb = GasState(gm_fb)
+gs_fb.T = 3315.556 + 273.15
+gs_fb.p = 2.1312e7
+gs_fb.massf = [0.53735, 0.46265, 0.0, 0.0, 0.0, 0.0]
+gs_fb.update_thermo_from_pT()
+
+gm_ob = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_ob = GasState(gm_ob)
+gs_ob.T = 3315.556 + 273.15
+gs_ob.p = 2.1367e7
+gs_ob.massf = [0.6228, 0.3772, 0.0, 0.0, 0.0, 0.0]
+gs_ob.update_thermo_from_pT()
+
+outlet_gm = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+outlet_gs = GasState(outlet_gm)
+outlet_gs.p = 1e3
+
+comb = SinglePhaseMultiSpeciesMultiInletNonReactivePipe(n_cells = NCELLS1, n_inlets = 3, \
+            bulk_geometry = [D_1, L_c], inlet_areas = [A_ox, A_fb, A_ob], \
+            init_flow_state = fs_init, comp_label = "Comb", limiter = "eilmer_van_albada_L2R2", \
+            recon_scheme = ["eilmer_L1R1", [1, 1]], recon_props = ["p", "T", "vel_x", "massf"], \
+            update_from = "pT", flux_scheme = "AUSMPlusUPOriginal", \
+            reverse_direction_for_mirrored_flow = False)
+
+comb.add_boundary_conditions(BC = [0, ["FromStagnationWithMassFlowRateInFlow_BC", 1, [gs_ox, 380.564]]]) #oxidiser line
+comb.add_boundary_conditions(BC = [1, ["FromStagnationWithMassFlowRateInFlow_BC", 1, [gs_fb, 65.589]]]) #fuel preburner line
+comb.add_boundary_conditions(BC = [2, ["FromStagnationWithMassFlowRateInFlow_BC", 1, [gs_ob, 29.93]]]) #ox preburner line
+
+comb.interface_idx_to_track = [0, 1, 2]
+
+conv_nozzle = SinglePhaseMultiSpeciesNonReactiveQuadraticNozzle(n_cells = NCELLS2, \
+                geometry = [D_1, D_t, L_cn], init_flow_state = fs_init, \
+                recon_props = ["p", "T", "vel_x", "massf"], recon_scheme = ["eilmer_L1R1", [1, 1]], \
+                limiter = "eilmer_van_albada_L2R2", update_from = "pT", comp_label = "conv_nozzle", \
+                flux_scheme = "AUSMPlusUPOriginal", reverse_direction_for_ghost_cells = False)
+
+conv_nozzle.interface_idx_to_track = [NCELLS2]
+
+div_nozzle = SinglePhaseMultiSpeciesNonReactiveEllipticNozzle(n_cells = NCELLS3, \
+                geometry = [D_t, D_e, L_dn], init_flow_state = fs_init, \
+                recon_props = ["p", "T", "vel_x", "massf"], recon_scheme = ["eilmer_L1R1", [1, 1]], \
+                limiter = "eilmer_van_albada_L2R2", update_from = "pT", comp_label = "div_nozzle", \
+                flux_scheme = "AUSMPlusUPOriginal", reverse_direction_for_ghost_cells = False)
+
+div_nozzle.add_boundary_conditions(BC = [NCELLS3, ["FixedPOutFlow_BC", 2, outlet_gs]])
+
+div_nozzle.interface_idx_to_track = [NCELLS3]
+
+joint1 = JointBlock(mesh_object_1 = comb, mesh_object_2 = conv_nozzle, \
+                block_1_interface_id_being_replaced = NCELLS1 + 2, \
+                block_2_interface_id_being_replaced = 0, \
+                new_interface = deepcopy(conv_nozzle.interface_array[0]), \
+                adding_ghost_cells_bool = False, new_component_label = "joint1")
+
+rocket = JointBlock(mesh_object_1 = joint1, mesh_object_2 = div_nozzle, \
+                    block_1_interface_id_being_replaced = NCELLS1 + NCELLS2 + 2, \
+                    block_2_interface_id_being_replaced = 0, \
+                    new_interface = deepcopy(div_nozzle.interface_array[0]), \
+                    adding_ghost_cells_bool = False, new_component_label = "rocket")
+#cfl_flag = [False, 1e-7]
+cfl_flag = [True, "cfl_ramp_from_tCurrent", [[0.01, 1e-6], [0.1, 1e-5]]]
+
+S = Solver(mesh_object = rocket, cfl_flag = cfl_flag, t_final = 0.005, data_save_dt = 0.001, \
+            transient_cell_flow_property_variables_to_write = ["massf", "molef", "conc", "T", "p", "rho", "u", "Ma", "vel_x"], \
+            transient_interface_flow_property_variables_to_write = ["Ma", "A", "mass_flux"], \
+            sim_number = 4, \
+            spatial_cell_flow_property_variables_to_write = ["T", "p", "rho", "u", "vel_x", "Ma", "massf"], \
+            rapid_data_save_steps = 100, simulation_description = "Test run of cold flow MSSE simulation with Ma 0.1 initialisation")
+"""
+
+####################################################################################################
+##### FV reactor with new fast chemistry model
+
+D = 0.45
+L = 0.45
+
+
+
+
+gm_init = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_init = GasState(gm_init)
+gs_init.p = 1e6
+gs_init.T = 3000.0
+gs_init.massf = [0.1, 0.9, 0.0, 0.0, 0.0, 0.0]
+gs_init.update_thermo_from_pT()
+
+fs_init = FlowState(state = gs_init, vel_x = 0.0)
+print(gm_init.species_names)
+
+ceq = pyeq.EqCalculator(spnames = ["H2", "O2", "OH", "O", "H", "H2O"])
+
+x0 = ceq.YtoX(Y = np.array([0.1, 0.9, 0.0, 0.0, 0.0, 0.0]))
+equil_Y = ceq.rhou(rho = gs_init.rho, u = gs_init.u, Xs0 = x0)
+equil_massf = ceq.XtoY(X = equil_Y)
+
+gm_equil = GasModel("H2-O2-6sp-thermally-perfect-gas-model.lua")
+gs_equil = GasState(gm_equil)
+gs_equil.rho = gs_init.rho
+gs_equil.T = gs_init.u
+gs_equil.massf = equil_massf
+
+
+
+print("pyeq equilibrium mass fraction:", equil_massf)
+
+
+H2 = Molecule(chemical_form = "H2")
+O2 = Molecule(chemical_form = "O2")
+OH = Molecule(chemical_form = "OH")
+H2O = Molecule(chemical_form = "H2O")
+H = Molecule(chemical_form = "H")
+O = Molecule(chemical_form = "O")
+
+bulk_reaction = BulkReaction(species = [H2, O2, OH, H2O, H, O])
+goal_massf_specified = {
+    "O2"        : 1.13056673e-01,
+    "H2"        : 5.08994151e-03,
+    "OH"        : 6.45912390e-02,
+    "H2O"       : 8.08622451e-01
+}
+
+pipe = SinglePhaseMultiSpeciesBulkChemistryForGoalMassfUniform(n_cells = 1, geometry = [D, L], \
+                limiter = "eilmer_van_albada_L2R2", comp_label = "FVReactor", \
+                init_flow_state = fs_init, recon_scheme = ["eilmer_L1R1", [1, 1]], \
+                recon_props = ["p", "T", "vel_x", "massf"], update_from = "pT", \
+                flux_scheme = "AUSMPlusUPOriginal", \
+                bulk_reaction_parameters = [0.1, goal_massf_specified, bulk_reaction], \
+                reverse_direction_for_ghost_cells = False)
+
+pipe.add_boundary_conditions(BC = [0, ["WallNoSlip_BC", 1]])
+pipe.add_boundary_conditions(BC = [1, ["WallNoSlip_BC", 1]])
+
+pipe.cell_idx_to_track = [0]
+
+cfl_flag = [False, 1e-7]
+#cfl_flag = [True, "cfl_ramp_from_tCurrent", [[0.01, 1e-6], [0.1, 1e-5]]]
+
+S = Solver(mesh_object = pipe, cfl_flag = cfl_flag, t_final = 1e-4, data_save_dt = 0.001, \
+            transient_cell_flow_property_variables_to_write = ["massf", "molef", "conc", "T", "p", "rho", "u", "Ma", "vel_x"], \
+            transient_interface_flow_property_variables_to_write = ["Ma", "A", "mass_flux"], \
+            sim_number = 5, \
+            spatial_cell_flow_property_variables_to_write = ["T", "p", "rho", "u", "vel_x", "Ma", "massf"], \
+            rapid_data_save_steps = 10, simulation_description = "Finite volume test case for new fast chemsitry method")
+

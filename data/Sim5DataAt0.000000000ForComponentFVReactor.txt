@@ -1,0 +1,7 @@
+Sim: 5
+Label: FVReactor
+Time: 0.0
+Description: Finite volume test case for new fast chemsitry method
+Variables: 17
+vel_x Ma p T rho u massf_H2 massf_O2 massf_OH massf_H2O massf_H massf_O dx dV A_c A_s pos_x
+0.000000000 0.000000000 1000000.000000000 3000.000000000 0.515752363 5222328.277276525 0.100000000 0.900000000 0.000000000 0.000000000 0.000000000 0.000000000 0.450000000 0.071569408 0.159043128 0.636172512 0.225000000 
